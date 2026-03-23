@@ -138,7 +138,11 @@ earthquakes |>
 
 ```{r}
 earthquakes |>
-  mutate(hour = hour(time))
+  mutate(hour = hour(time)) |>
+  group_by(hour) |>
+  summarise(total = n()) |>
+  arrange(desc(total))
+  
 ```
 
 **A10:** Use the mutate function as well as the lubridate "hour" function to create a new column with the hour the earthquake took place, counting from 0 to 23.zA
@@ -165,7 +169,17 @@ earthquakes |>
 #### **Q12** I have no idea how earthquakes work and I'm interested in seeing if there is a particular time of day in which serious earthquakes happen. How can I see that condensed in a table with all the hours in a day and all the serious earthquakes in each hour? What is the hour with fewer serious earthquakes and the one with the most serious earthquakes?
 
 ```{r}
-#need to ask about this in class because I have zero clue where to start
+earthquakes |>
+  mutate(hour = hour(time)) |>
+  mutate(over_three = case_when(
+    mag > 3 ~ "Yes",
+    mag <= 3 ~ "No",
+    .default = NA
+  )) |>
+  filter(str_detect(over_three, "Yes")) |>
+  group_by(hour) |>
+  summarise(total = n()) |>
+  arrange(desc(total))
 ```
 
 **A12**: *need to ask about this in class because I have zero clue where to start*
