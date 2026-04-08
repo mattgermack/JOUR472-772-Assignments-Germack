@@ -53,19 +53,33 @@ In this notebook, we are reverse engineering five sentences from the story.
 ### Sentence 1
 
 * **Sentence text**: [A WRAL News analysis of campaign finance filings also turned up $16,000 in donations to legislative campaigns during session from 15 PACs with a lobbyist. Each would appear to be a violation of state fundraising rules, but spokespeople for most of the PACs, or the companies they represent, said there was a simple explanation: The checks were written before session.]
-* **Analysis summary**: [Write up two to three sentences describing the results of your analysis.  Were you able to confirm the finding? If not, why not?]
+* **Analysis summary**: [Identifying which legislative campaigns received money from a PAC in-session is easy — By sorting for PACs that gave during session, there's a small-enough amount of datapoints that I can manually see who received PAC money, and how much that total is. While our number is higher than $16,000, it's a small difference, and it's possible that further reporting cancelled out any certain donations. However, there's no way to tell that from just the data.]
 
 ```{r}
 # Put code to reverse engineer sentence here
+donors$amount <- as.numeric(gsub("[$,]", "", trimws(donors$amount)))
 
+donors$date_clean <- as.Date(donors[["date"]], "%m/%d/%y")
+ 
+pacs_in_session <- filter(donors,
+                     date_clean >= "2018-05-16" &
+                     date_clean <= "2018-06-29" &
+                     str_detect(name_clean, "PAC"))
+pac_to_legis <- pacs_in_session |>
+  filter(str_detect(committee_name, "SAINE|GRAHAM|GUNN|WRAY|CHAUDHURI|RABON|ALEXANDER|CLARK|EDWARDS|WATFORD|JONES"))
+
+pac_to_legis |>
+  summarise(total = sum(amount))
+ 
 # Display results of code below this codeblock
+#The code shows $17,250 donated from 15 PACs during session
 
 ```
 
 ### Sentence 2
 
 * **Sentence text**: [Beer distributors also gave during session. Mark Craig, the president of distributor R.H. Barringer, put more than $30,000 into state legislative campaigns during the six-week period, including the maximum $5,200 to Berger. He was the top individual donor to legislative campaigns during session.]
-* **Analysis summary**: [Write up two to three sentences describing the results of your analysis.  Were you able to confirm the finding? If not, why not?]
+* **Analysis summary**: [We were able to confirm our finding. Using a string detect, we were able to take out all of Mark Craig's donations to NC legilators, along with the maximum donation of 5200. It's pretty straightforward, but it's still able to be confirmed.]
 
 ```{r}
 # Put code to reverse engineer sentence here
@@ -80,11 +94,23 @@ donors |>
 
 ### Sentence 3
 
-* **Sentence text**: [Add in donations to the two main political parties and to a handful of other large fundraising vehicles for state legislative races, and the in-session giving topped $3.4 million. Gov. Roy Cooper's main campaign account brought in another $407,000 during session.]
-* **Analysis summary**: [Write up two to three sentences describing the results of your analysis.  Were you able to confirm the finding? If not, why not?]
+* **Sentence text**: [All told during the six-week General Assembly session, more than 1.1 million flowed into state legislators' campaign accounts. That's a conservative figure, reached by backing out money that simply flowed from one politician's campaign to another and money elected officials put into their own campaigns. Add in donations to the two main political parties and to a handful of other large fundraising vehicles for state legislative races, and the in-session giving topped 3.4 million.]
+* **Analysis summary**: [Yes, all numbers are confirmed. We had to limit the dataset to just donations within the six-week session; the overall total was correct, and given there are only six "party vehicles" listed, their total is the difference between the overall total and $3.4 million. All other donations are to state legislators and add up to $1.1 million]
 
 ```{r}
 # Put code to reverse engineer sentence here
+in_session_donations <- donors |>
+  filter(date_clean >= "2018-05-16" &
+          date_clean <= "2018-06-29")
+
+#Shows $3.446 milion in donations
+in_session_donations |>
+  summarise(total = sum(amount))
+  
+#State party vehicles number, shows $2.288 million. Subtract from $3.446 million to get "more than $1.1 million"
+in_session_donations |>
+  filter(str_detect(committee_name, "NC DEC|NC REC|NORTH CAROLINA DEM|NC HOUSE REPUB|NC REPUB")) |>
+  summarise(total = sum(amount))
 
 # Display results of code below this codeblock
 
@@ -93,11 +119,30 @@ donors |>
 ### Sentence 4
 
 * **Sentence text**: [This year's legislative session also saw significant donations from hog farmers and beer distributors, both industries with important legislation before the General Assembly. Senate President Pro Tem Phil Berger's campaign alone raised nearly $222,000 during session. Twenty-three people gave him the maximum allowed: $5,200.]
-* **Analysis summary**: [Write up two to three sentences describing the results of your analysis.  Were you able to confirm the finding? If not, why not?]
+* **Analysis summary**: [Our analysis is correct. In order to do this question, constraints on date needed to align with the time that the six week session started and ended. The total amount donated to Berger during that time was $221925, which is roughly $220,000, which is what the article said. This code also outlines the 23 donors who gave $5200 as their donation. I also added in some code about the hog farmers and beer industry, but to me their donations don't seem that significant.]
 
 ```{r}
 # Put code to reverse engineer sentence here
+full_session <- subset(donors, date_clean >= "2018-05-16" & date_clean <= "2018-06-29")
 
+#Berger
+berger <- subset(full_session, committee_name == "PHILIP E BERGER COMM")
+
+#Gives full amount of campaign donations during session
+sum(berger$amount, na.rm = TRUE)
+
+#gives number of donors to Berger
+nrow(subset(berger, amount == 5200))
+
+#hog farmers donations
+hog <- subset(full_session, grepl("pork|smithfield|farm bureau", name, ignore.case = TRUE))
+
+sum(hog$amount, na.rm = TRUE)
+
+#beer distributors
+beer <- subset(full_session, grepl("beer & wine wholesale", name, ignore.case = TRUE))
+
+sum(beer$amount, na.rm = TRUE)
 # Display results of code below this codeblock
 
 ```
@@ -105,11 +150,24 @@ donors |>
 ### Sentence 5
 
 * **Sentence text**: [There was a major bump during the first week of session this year for the state parties, but that's because three large donors – LinkedIn co-founder Reid Hoffman, Durham investor Greg Lindberg and Lindberg's Eli Research company – donated $1.3 million that week to the state Republican and Democrat parties.]
-* **Analysis summary**: [Write up two to three sentences describing the results of your analysis.  Were you able to confirm the finding? If not, why not?]
+* **Analysis summary**: [This one was a little more challenging. I had to change the date format so that the computer could figure out when the first week of the session was. Using the donors names was easy, along with what columns I wanted shown. The number came out of 1.25 million, which was most likely rounded up in the article. This code also breaks down how much each of the three donors gave, with Reid Hoffman and Greg Lindberg donated 500,000 dollars in the first week.]
 
 ```{r}
 # Put code to reverse engineer sentence here
+donors$amount <- as.numeric(gsub("[$,]", "", trimws(donors$amount)))
 
+donors$date_clean <- as.Date(donors[["date"]], "%m/%d/%y")
+ 
+big_donors <- c("Reid Garrett Hoffman", "Greg Lindberg", "ELI Research LLC")
+ 
+first_week <- subset(donors,
+                     date_clean >= "2018-05-16" &
+                     date_clean <= "2018-05-22" &
+                     name %in% big_donors)
+ 
+first_week[, c("date_clean", "name", "committee_name", "amount")]
+ 
+sum(first_week$amount, na.rm = TRUE)
 # Display results of code below this codeblock
 
 ```
