@@ -7,11 +7,19 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 ```
 
 ## Load libraries and establish settings
 
 **Task** Create a codeblock and load appropriate packages and settings for this lab. We'll be making some charts, working with dates and retrieving Census data.
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(tidycensus)
+```
 
 ## Load and modify data
 
@@ -20,6 +28,12 @@ knitr::opts_chunk$set(echo = TRUE)
 -   Prince George's County 911 Overdose Calls
 
 You will need to create columns for the date, week and month based on the existing `datetime` column.
+
+```{r}
+pg_overdose_calls <- read_csv ("data/prince_georges_2022_overdoses.csv") |> 
+  clean_names() |>
+  mutate(date = date(datetime), month = month(datetime, label=TRUE), week = week(datetime))
+```
 
 ## Questions
 
@@ -31,9 +45,23 @@ You will need to create columns for the date, week and month based on the existi
 
 Compare the results here to those from the pre_lab_08 bar chart - are there major differences in the months with the highest and lowest figures? Describe that below.
 
-**A1.**
+**A1.** Yes, there is definitely a difference. Two of the highest months for calls are November and December, which is directly contradictory to the thesis of "there are more calls in warmer months". Similarly to the other chart, though, January and February are on the low end of calls in a month.
 
 ```{r}
+calls_by_month <- pg_overdose_calls |> 
+  group_by(month) |> 
+  summarize(total = n()) |> 
+  mutate(pct = (total / sum(total) * 100))
+
+calls_by_month |>
+  ggplot() + geom_bar(aes(x = month, weight = pct)) +
+  labs(
+    title = '% of PG County overdose calls by month',
+    y = '% of calls',
+    x = 'Month',
+    caption = 'Data from Prince Georges County EMS'
+  ) +
+  coord_flip()
 ```
 
 **Q2.** Let's visualize this data on a weekly basis using a line chart. As in Q1, generate a dataframe with the total number of calls for each week, and then create a line chart to show the distribution of calls over time. Your line chart must have:
@@ -44,9 +72,23 @@ Compare the results here to those from the pre_lab_08 bar chart - are there majo
 
 Describe the pattern of results; you may want to look at the data to dig into particular outliers.
 
-**A2.**
+**A2.** PG County overdose calls by week is a bimodal dataset, with substantial peaks in weeks 28 and 51. The first four weeks of the year are relatively low in total.
 
 ```{r}
+calls_by_week <- pg_overdose_calls |>
+   mutate(week = week(datetime)) |>
+  group_by(week) |>
+  summarize(total_calls = n())
+  
+calls_by_week |>
+  ggplot() +
+  geom_line(aes(x = week, y = total_calls)) +
+  labs(
+    title = 'Total PG County overdose calls by week',
+    y = 'Total calls per week',
+    x = 'Week',
+    caption = 'Data from Prince Georges County EMS'
+  )
 ```
 
 **Q3.** A scatterplot is a type of chart that helps us see relationships between two variables. One variable goes on the x axis, the other on the y axis. For each row/observation in our data, a scatterplot puts a circle (or a "point") where the two variables intersect on a grid.
@@ -71,7 +113,26 @@ To answer this question, do the following:
 6.  Add a label for each point that shows the zip code using geom_text() - see some examples of its use at <https://ggplot2.tidyverse.org/reference/geom_text.html#ref-examples>. Try to make the names as easy to read as possible by avoiding overlap.
 7.  In the answer space below, describe what you see and answer the questions posed above. In a general sense, what do you think this means? Feel free to consider the actual raw values: how would you report out the main point(s) of this chart?
 
-**A3.**
+**A3.** Most of the zip codes with high amounts of 911 overdose calls are relatively lower-income, and most of the higher-income zip codes have low amounts of 911 overdose calls. This data shows that there is something causing those in worse areas to be more affected by drug overdoses, and further reporting for this story would look into what those things may be.
 
 ```{r}
+calls_by_zip <- pg_overdose_calls |>
+  group_by(zipcode) |>
+  summarize(total_calls = n())
+
+income_by_zip <- get_acs(geography = "zcta", variables = "B19013_001", year = 2022)
+
+calls_by_zip_and_income <- calls_by_zip |>
+  left_join(income_by_zip, by = c("zipcode" = "GEOID"))
+
+calls_by_zip_and_income |>
+  ggplot(aes(x = estimate, y = total_calls, label = zipcode)) +
+  geom_point() +
+  geom_text(check_overlap = TRUE, size = 2, vjust = -1) +
+  labs(
+    title = 'PG County overdose calls by zip code cross-referenced with median income',
+    x = 'Median income',
+    y = 'Overdose calls',
+    caption = 'Data from Prince Georges County EMS and US Census Bureau ACS')
+  
 ```
