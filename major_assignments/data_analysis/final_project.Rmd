@@ -3,6 +3,8 @@ title: "final_project"
 output: html_document
 ---
 
+Thus far, our most consequential finding is the 10% decrease in four year seniors. It's a clear and obvious data point without any clear confounding variables that proves a change.
+
 ```{r}
 library(tidyverse)
 library(janitor)
