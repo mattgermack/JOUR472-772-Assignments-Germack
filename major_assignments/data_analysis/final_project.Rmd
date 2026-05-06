@@ -1,0 +1,152 @@
+---
+title: "final_project"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(tidycensus)
+library(tigris)
+
+wbb_teams <- read_csv("teams.csv") |> clean_names()
+
+wbb_rosters21 <- read_csv("wbb_rosters_2020_21.csv") |> mutate(player_id = as.character(player_id))
+wbb_rosters22 <- read_csv("wbb_rosters_2021_22.csv") |> mutate(player_id = as.character(player_id))
+wbb_rosters23 <- read_csv("wbb_rosters_2022_23.csv") |> mutate(player_id = as.character(player_id))
+wbb_rosters24 <- read_csv("wbb_rosters_2023_24.csv") |> mutate(player_id = as.character(player_id))
+wbb_rosters25 <- read_csv("wbb_rosters_2024_25.csv") |> mutate(player_id = as.character(player_id))
+wbb_rosters26 <- read_csv("wbb_rosters_2025_26.csv")
+
+combined_rosters <- bind_rows(list(wbb_rosters21, wbb_rosters22, wbb_rosters23, wbb_rosters24, wbb_rosters25)) # <- This code line puts all the roster info into one dataframe
+
+non_us <- read_csv("non_us.csv")|> clean_names()
+
+coach_history <- read_csv("coaches/coaches_with_history.csv") |> clean_names()
+```
+Data exploration: Once all the roster data is combined, we have over 41000 data points across 31 different variables. While some of those 31 are pretty useless, (NCAA ID, Player ID, etc), some things we didn't expect it to include like high school and hometowns were in the dataset.
+
+The other dataframes we got were the teams, which doesn't have a ton of relevant information at first glance, but does show us that there are over 1100 schools that make up this dataset, a non-us chart that shows the amount of players from every county and the percent change from 2023 to 2024, then lastly there's also a coaching history dataframe. This one has almost 13000 observations, stating the person's title on the staff, their school and tenure.
+
+As far as the limitations, this data only goes back four years. Not a huge sample of time to look at, but there is a LOT of data for the four years we have access to in this project. Because of that timeframe, we can't really answer the NIL questions we posed last week and we will need to adjust our time frames for the change over time questions.
+
+1) Do Power Five schools bring in more international players than mid- and low-major schools? By how much?
+
+**A** This data shows that high-major schools have nearly double the percentage of international players as non-high-major schools(13.9 to 7.8). We've got a pretty straightforward answer to our question and look good to go here.
+
+```{r}
+combined_rosters_international <- combined_rosters |>
+  mutate(
+    conference_type = case_when(
+      str_detect(conference, "ACC") ~ "Power5",
+      str_detect(conference, "Big East") ~ "Power5",
+      str_detect(conference, "Big Ten") ~ "Power5",
+      str_detect(conference, "Big 12") ~ "Power5",
+      str_detect(conference, "Pac-12") ~ "Power5",
+      str_detect(conference, "SEC") ~ "Power5",
+      .default = "Mid/Low"
+    ),
+    international = case_when(
+      str_detect(country_clean, "USA") ~ "No",
+      .default = "Yes"
+    )
+  )
+
+combined_rosters_international |>
+  group_by(conference_type, international) |>
+  summarise(count = n())
+
+combined_rosters_international |>
+  group_by(conference_type) |>
+  summarise(
+    total_players = n(),
+    international_players = sum(international == "Yes"),
+    percent_international = international_players / total_players * 100
+  )
+
+```
+
+
+2) How many 4-year one-team seniors were there pre-NIL and how many are there now? 
+
+**A** This data shows a 10% decrease in four-year seniors without a transfer from 2021 to 2026. Given NIL is virtually the only variable to change in this time, it shows pretty conclusively that NIL/other money has led to an increase in transfers over the past five years. It also shows that more people are staying longer in college, as there's WAY more seniors/grad students than there used to be.
+```{r}
+pre_nil_seniors <- wbb_rosters21 |>
+  filter(str_detect(year, "Senior|Graduate|Graduate Student|Fifth Year|Redshirt Senior|Sr.|R-Sr.|Gr.")) |>
+  mutate(
+    fouryearsenior = case_when(
+      is.na(previous_school_clean) ~ "Yes",
+      .default = "No"
+    ))
+
+pre_nil_seniors |>
+  summarise(total_players = n(),
+            no_transfer = sum(fouryearsenior == "Yes"),
+            transfer = sum(fouryearsenior == "No"),
+            percent_loyal_pre = no_transfer / total_players * 100)
+
+post_nil_seniors <- wbb_rosters26 |>
+  filter(str_detect(year, "Senior|Graduate|Graduate Student|Fifth Year|Redshirt Senior|Sr.|R-Sr.|Gr.")) |>
+    mutate(
+    fouryearsenior = case_when(
+      is.na(previous_school_clean) ~ "Yes",
+      .default = "No"
+    ))
+
+post_nil_seniors |>
+  summarise(total_players = n(),
+            no_transfer = sum(fouryearsenior == "Yes"),
+            transfer = sum(fouryearsenior == "No"),
+            percent_loyal_post = no_transfer / total_players * 100)
+
+```
+3) How much head coaching turnover do schools experience? What is the geographic breakdown for the most popular state?
+
+**A** In this timeframe, more schools have changed coaches than retained, although there are a lot of coaches in this list who simply accepted the same position at a larger school with more resources.
+
+```{r}
+coaching_turnover <- coach_history |>
+  filter(position_title_standardized == "Head Coach") |>
+  filter(category == "College") |>
+  mutate(coach_change = !is.na(end_year))
+
+coaching_turnover |>
+  group_by(coach_change) |>
+  summarise(total = n())
+
+# First find the most popular state, then build a map of the state
+
+popular_state <- combined_rosters |>
+  group_by(state_clean) |>
+  summarise(total = n()) |>
+  arrange(desc(total))
+popular_state
+
+pa_cities <- places(state = "PA", cb = TRUE) |> clean_names() |>
+  left_join(combined_rosters, join_by(name == hometown)) |>
+  group_by(name) |>
+  summarise(total = n()) |>
+  arrange(desc(total))
+
+ggplot() +
+  geom_sf(data = pa_cities, aes(fill = total), color = NA) +
+  scale_fill_viridis_c(option = "magma") +
+  theme_minimal()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
